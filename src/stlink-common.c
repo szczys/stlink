@@ -48,6 +48,38 @@
 #define FLASH_CR_STRT 6
 #define FLASH_CR_LOCK 7
 
+/**************************
+ Begin stm32f05x flash controller defines
+ RM0091 reference manual */
+#define STM32F0_FLASH_REGS_ADDR 0x40022000	//FLASH interface (Table 2)
+#define STM32F0_FLASH_REGS_SIZE 0x400		//FLASH interface size in hex (Table 2)
+
+	//These offsets found in Table 8
+#define STM32F0_FLASH_ACR (FLASH_REGS_ADDR + 0x00)
+#define STM32F0_FLASH_KEYR (FLASH_REGS_ADDR + 0x04)
+#define STM32F0_FLASH_SR (FLASH_REGS_ADDR + 0x0c)
+#define STM32F0_FLASH_CR (FLASH_REGS_ADDR + 0x10)
+#define STM32F0_FLASH_AR (FLASH_REGS_ADDR + 0x14)
+#define STM32F0_FLASH_OBR (FLASH_REGS_ADDR + 0x1c)
+#define STM32F0_FLASH_WRPR (FLASH_REGS_ADDR + 0x20)
+
+	//"Unlocking Flash Memory" -- Page 45
+//#define STM32F0_FLASH_RDPTR_KEY 0x00a5 //NOTE: This chip has no RDPTR_KEY
+#define STM32F0_FLASH_KEY1 0x45670123
+#define STM32F0_FLASH_KEY2 0xcdef89ab
+
+	//Section 3.5.4
+#define STM32F0_FLASH_SR_BSY 0
+#define STM32F0_FLASH_SR_EOP 5
+
+	//Section 3.5.5
+#define STM32F0_FLASH_CR_PG 0
+#define STM32F0_FLASH_CR_PER 1
+#define STM32F0_FLASH_CR_MER 2
+#define STM32F0_FLASH_CR_STRT 6
+#define STM32F0_FLASH_CR_LOCK 7
+/* End stm32f05x flash controller defines
+*****************************/
 
 //32L = 32F1 same CoreID as 32F4!
 #define STM32L_FLASH_REGS_ADDR ((uint32_t)0x40023c00)
@@ -1049,7 +1081,7 @@ int stlink_erase_flash_page(stlink_t *sl, stm32_addr_t flashaddr)
         | (1 << 0) | (1 << 1) | (1 << 2);
     stlink_write_debug32(sl, STM32L_FLASH_PECR, val);
   }
-  else if (sl->core_id == STM32VL_CORE_ID)
+  else if ((sl->core_id == STM32VL_CORE_ID) || (sl->core_id == STM32F0_CORE_ID))
   {
     /* wait for ongoing op to finish */
     wait_flash_busy(sl);
@@ -1212,7 +1244,7 @@ int write_loader_to_sram(stlink_t *sl, stm32_addr_t* addr, size_t* size) {
       loader_code = loader_code_stm32l;
       loader_size = sizeof(loader_code_stm32l);
     }
-    else if (sl->core_id == STM32VL_CORE_ID)
+    else if ((sl->core_id == STM32VL_CORE_ID) || (sl->core_id == STM32F0_CORE_ID))
     {
       loader_code = loader_code_stm32vl;
       loader_size = sizeof(loader_code_stm32vl);
@@ -1556,7 +1588,7 @@ int stlink_write_flash(stlink_t *sl, stm32_addr_t addr, uint8_t* base, unsigned 
     	val = stlink_read_debug32(sl, STM32L_FLASH_PECR)
              | (1 << 0) | (1 << 1) | (1 << 2);
     	stlink_write_debug32(sl, STM32L_FLASH_PECR, val);
-    } else if (sl->core_id == STM32VL_CORE_ID) {
+    } else if ((sl->core_id == STM32VL_CORE_ID) || (sl->core_id == STM32F0_CORE_ID)) {
         ILOG("Starting Flash write for VL core id\n");
         /* flash loader initialization */
         if (init_flash_loader(sl, &fl) == -1) {
@@ -1655,7 +1687,7 @@ int run_flash_loader(stlink_t *sl, flash_loader_t* fl, stm32_addr_t target, cons
       stlink_write_reg(sl, count, 2); /* count (32 bits words) */
       stlink_write_reg(sl, fl->loader_addr, 15); /* pc register */
 
-    } else if (sl->core_id == STM32VL_CORE_ID) {
+    } else if ((sl->core_id == STM32VL_CORE_ID) || (sl->core_id == STM32F0_CORE_ID)) {
 
       size_t count = size / sizeof(uint16_t);
       if (size % sizeof(uint16_t)) ++count;
@@ -1709,7 +1741,7 @@ int run_flash_loader(stlink_t *sl, flash_loader_t* fl, stm32_addr_t target, cons
         return -1;
       }
 
-    } else if (sl->core_id == STM32VL_CORE_ID) {
+    } else if ((sl->core_id == STM32VL_CORE_ID) || (sl->core_id == STM32F0_CORE_ID)) {
 
       stlink_read_reg(sl, 2, &rr);
       if (rr.r[2] != 0) {
