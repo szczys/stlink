@@ -637,7 +637,7 @@ stlink_t* stlink_open_usb(const int verbose) {
     memset(sl, 0, sizeof (stlink_t));
     memset(slu, 0, sizeof (struct stlink_libusb));
 
-    ugly_init(verbose);
+    ugly_init(99);
     sl->backend = &_stlink_usb_backend;
     sl->backend_data = slu;
     

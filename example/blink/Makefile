@@ -7,7 +7,7 @@ DEF_CFLAGS=-g -O2 -mlittle-endian -mthumb -ffreestanding -nostdlib -nostdinc
 DEF_CFLAGS+=-Wl,-Ttext,0x20000000 -Wl,-e,0x20000000
 
 # to write to flash then run
-# DEF_CFLAGS+=-Wl,-Ttext,0x08000000 -Wl,-e,0x08000000
+#DEF_CFLAGS+=-Wl,-Ttext,0x08000000 -Wl,-e,0x08000000
 
 CFLAGS_VL=$(DEF_CFLAGS) -mcpu=cortex-m3 -DCONFIG_STM32VL_DISCOVERY=1
 CFLAGS_L=$(DEF_CFLAGS) -mcpu=cortex-m3 -DCONFIG_STM32L_DISCOVERY

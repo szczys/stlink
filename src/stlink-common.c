@@ -516,7 +516,7 @@ void stlink_run(stlink_t *sl) {
 }
 
 void stlink_status(stlink_t *sl) {
-    DLOG("*** stlink_status ***\n");
+    //DLOG("*** stlink_status ***\n");
     sl->backend->status(sl);
     stlink_core_stat(sl);
 }
@@ -701,7 +701,7 @@ void stlink_core_stat(stlink_t *sl) {
     switch (sl->q_buf[0]) {
         case STLINK_CORE_RUNNING:
             sl->core_stat = STLINK_CORE_RUNNING;
-            DLOG("  core status: running\n");
+            //DLOG("  core status: running\n");
             return;
         case STLINK_CORE_HALTED:
             sl->core_stat = STLINK_CORE_HALTED;
@@ -1192,6 +1192,55 @@ int write_loader_to_sram(stlink_t *sl, stm32_addr_t* addr, size_t* size) {
         0x00, 0xbe, /* bkpt	#0x00 */
         0x00, 0x20, 0x02, 0x40, /* STM32_FLASH_BASE: .word 0x40022000 */
     };
+    
+    /* from openocd, contrib/loaders/flash/stm32f1x.s 	*/
+    /* use: arm-none-eabi-gcc -c stm32f1x.S -o test 	*/
+    /* use: arm-none-eabi-objdump -d test 		*/
+    /* then translate to hex by hand 			*/
+    static const uint8_t loader_code_stm32f0[] = {
+	/* 00000000 <wait_fifo>: */
+	0x16,0x68,	//0:	6816      	ldr	r6, [r2, #0]
+	0x00,0x2e,	//2:	2e00      	cmp	r6, #0
+	0x1a,0xd0,	//4:	d01a      	beq.n	3c <exit>
+	0x55,0x68,	//6:	6855      	ldr	r5, [r2, #4]
+	0xb5,0x42,	//8:	42b5      	cmp	r5, r6
+	0xf9,0xd0,	//a:	d0f9      	beq.n	0 <wait_fifo>
+	0x01,0x26,	//c:	2601      	movs	r6, #1
+	0x06,0x61,	//e:	6106      	str	r6, [r0, #16]
+	0x2e,0x88,	//10:	882e      	ldrh	r6, [r5, #0]
+	0x26,0x80,	//12:	8026      	strh	r6, [r4, #0]
+	0x02,0x35,	//14:	3502      	adds	r5, #2
+	0x02,0x34,	//16:	3402      	adds	r4, #2
+
+	/*00000018 <busy>: */
+	0xc6,0x68,	//18:	68c6      	ldr	r6, [r0, #12]
+	0x01,0x27,	//1a:	2701      	movs	r7, #1
+	0x3e,0x42,	//1c:	423e      	tst	r6, r7
+	0xd1,0xfb,	//1e:	d1fb      	bne.n	18 <busy>
+	0x14,0x27,	//20:	2714      	movs	r7, #20
+	0x3e,0x42,	//22:	423e      	tst	r6, r7
+	0x08,0xd1,	//24:	d108      	bne.n	38 <error>
+	0x9d,0x42,	//26:	429d      	cmp	r5, r3
+	0x01,0xd3,	//28:	d301      	bcc.n	2e <no_wrap>
+	0x15,0x46,	//2a:	4615      	mov	r5, r2
+	0x08,0x35,	//2c:	3508      	adds	r5, #8
+
+	/*0000002e <no_wrap>: */
+	0x55,0x60,	//2e:	6055      	str	r5, [r2, #4]
+	0x01,0x39,	//30:	3901      	subs	r1, #1
+	0x00,0x29,	//32:	2900      	cmp	r1, #0
+	0x02,0xd0,	//34:	d002      	beq.n	3c <exit>
+	0xe3,0xe7,	//36:	e7e3      	b.n	0 <wait_fifo>
+
+	/*00000038 <error>: */
+	0x00,0x20,	//38:	2000      	movs	r0, #0
+	0x50,0x60,	//3a:	6050      	str	r0, [r2, #4]
+
+	/*0000003c <exit>: */
+	0x30,0x46, 	//3c:	4630      	mov	r0, r6
+	0x00,0xbe	//3e:	be00      	bkpt	0x0000
+
+    };
 
     static const uint8_t loader_code_stm32l[] = {
 
@@ -1244,12 +1293,18 @@ int write_loader_to_sram(stlink_t *sl, stm32_addr_t* addr, size_t* size) {
       loader_code = loader_code_stm32l;
       loader_size = sizeof(loader_code_stm32l);
     }
-    else if ((sl->core_id == STM32VL_CORE_ID) || (sl->core_id == STM32F0_CORE_ID))
+    else if (sl->core_id == STM32F0_CORE_ID)
+    {
+      loader_code = loader_code_stm32f0;
+      loader_size = sizeof(loader_code_stm32f0);
+      DLOG("Using STM32F0 loader\n");
+    }
+    else if (sl->core_id == STM32VL_CORE_ID)
     {
       loader_code = loader_code_stm32vl;
       loader_size = sizeof(loader_code_stm32vl);
     }
-	else if (sl->chip_id == STM32_CHIPID_F2 || sl->chip_id == STM32_CHIPID_F4)
+    else if ((sl->chip_id == STM32_CHIPID_F2) || (sl->chip_id == STM32_CHIPID_F4))
 	{
 		loader_code = loader_code_stm32f4;
 		loader_size = sizeof(loader_code_stm32f4);
@@ -1605,7 +1660,7 @@ int stlink_write_flash(stlink_t *sl, stm32_addr_t addr, uint8_t* base, unsigned 
             /* unlock and set programming mode */
             unlock_flash_if(sl);
             set_flash_cr_pg(sl);
-            //DLOG("Finished setting flash cr pg, running loader!\n");
+            DLOG("Finished setting flash cr pg, running loader!\n");
             if (run_flash_loader(sl, &fl, addr + off, base + off, size) == -1) {
                 WLOG("run_flash_loader(%#zx) failed! == -1\n", addr + off);
                 return -1;
@@ -1687,7 +1742,7 @@ int run_flash_loader(stlink_t *sl, flash_loader_t* fl, stm32_addr_t target, cons
       stlink_write_reg(sl, count, 2); /* count (32 bits words) */
       stlink_write_reg(sl, fl->loader_addr, 15); /* pc register */
 
-    } else if ((sl->core_id == STM32VL_CORE_ID) || (sl->core_id == STM32F0_CORE_ID)) {
+    } else if (sl->core_id == STM32VL_CORE_ID) {
 
       size_t count = size / sizeof(uint16_t);
       if (size % sizeof(uint16_t)) ++count;
@@ -1699,16 +1754,28 @@ int run_flash_loader(stlink_t *sl, flash_loader_t* fl, stm32_addr_t target, cons
       stlink_write_reg(sl, 0, 3); /* flash bank 0 (input) */
       stlink_write_reg(sl, fl->loader_addr, 15); /* pc register */
 
-	} else if (sl->chip_id == STM32_CHIPID_F2 || sl->chip_id == STM32_CHIPID_F4) {
+    } else if (sl->core_id == STM32F0_CORE_ID) {
 
-		size_t count = size / sizeof(uint32_t);
-		if (size % sizeof(uint32_t)) ++count;
+      size_t count = size / sizeof(uint16_t);
+      if (size % sizeof(uint16_t)) ++count;
 
-		/* setup core */
-		stlink_write_reg(sl, fl->buf_addr, 0); /* source */
-		stlink_write_reg(sl, target, 1); /* target */
-		stlink_write_reg(sl, count, 2); /* count (32 bits words) */
-		stlink_write_reg(sl, fl->loader_addr, 15); /* pc register */
+      /* setup core */
+      stlink_write_reg(sl, FLASH_REGS_ADDR, 0); /* r0 - flash base (in), status (out) */
+      stlink_write_reg(sl, count, 1); /* r1 - count (halfword-16bit) */
+      stlink_write_reg(sl, fl->buf_addr, 2); /* r2 - workarea start */
+      stlink_write_reg(sl, fl->buf_addr+size, 3); /* r3 - workarea end */
+      stlink_write_reg(sl, target, 4); /* r4 - target address */
+
+    } else if (sl->chip_id == STM32_CHIPID_F2 || sl->chip_id == STM32_CHIPID_F4) {
+
+        size_t count = size / sizeof(uint32_t);
+        if (size % sizeof(uint32_t)) ++count;
+
+	/* setup core */
+	stlink_write_reg(sl, fl->buf_addr, 0); /* source */
+	stlink_write_reg(sl, target, 1); /* target */
+	stlink_write_reg(sl, count, 2); /* count (32 bits words) */
+	stlink_write_reg(sl, fl->loader_addr, 15); /* pc register */
 
     } else {
       fprintf(stderr, "unknown coreid: 0x%x\n", sl->core_id);
